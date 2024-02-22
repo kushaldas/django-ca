@@ -128,7 +128,8 @@ class TestCaseMixin(TestCaseProtocol):  # pylint: disable=too-many-public-method
         if cas == "__all__":
             cas = tuple(k for k, v in CERT_DATA.items() if v.get("type") == "ca")
         elif cas == "__usable__":
-            cas = tuple(k for k, v in CERT_DATA.items() if v.get("type") == "ca" and v["key_filename"])
+            # cas = tuple(k for k, v in CERT_DATA.items() if v.get("type") == "ca" and v["private_key_path"])
+            cas = tuple(k for k, v in CERT_DATA.items() if v.get("type") == "ca" and (v.get("private_key_path") or v.get("hsm_key_label")))
         elif isinstance(cas, str):  # pragma: no cover
             self.fail(f"{cas}: Unknown alias for load_cas.")
 
@@ -915,9 +916,9 @@ class TestCaseMixin(TestCaseProtocol):  # pylint: disable=too-many-public-method
             ctx["parent_serial"] = CERT_DATA[parent]["serial"]
             ctx["parent_serial_colons"] = CERT_DATA[parent]["serial_colons"]
 
-        if CERT_DATA[name]["key_filename"] is not False:
+        if CERT_DATA[name]["private_key_path"] is not False:
             storage = storages["django-ca"]
-            ctx["key_path"] = storage.path(CERT_DATA[name]["key_filename"])
+            ctx["key_path"] = storage.path(CERT_DATA[name]["private_key_path"])
         return ctx
 
     @classmethod
@@ -941,8 +942,11 @@ class TestCaseMixin(TestCaseProtocol):  # pylint: disable=too-many-public-method
         kwargs.setdefault(
             "sign_authority_information_access", CERT_DATA[name].get("sign_authority_information_access")
         )
-
-        ca = CertificateAuthority(name=name, private_key_path=path, enabled=enabled, parent=parent, **kwargs)
+        secrets = {"private_key_path":CERT_DATA[name].get("private_key_path"),
+            "hsm_key_label":CERT_DATA[name].get("hsm_key_label"),
+            "hsm_key_type":CERT_DATA[name].get("hsm_key_type"),
+        }
+        ca = CertificateAuthority(name=name, secrets=secrets, enabled=enabled, parent=parent, **kwargs)
         ca.update_certificate(parsed)  # calculates serial etc
         ca.full_clean()
         ca.save()
@@ -1039,7 +1043,7 @@ class TestCaseMixin(TestCaseProtocol):  # pylint: disable=too-many-public-method
     def usable_cas(self) -> Iterator[Tuple[str, CertificateAuthority]]:
         """Yield loaded generated certificates."""
         for name, ca in self.cas.items():
-            if CERT_DATA[name]["key_filename"]:
+            if CERT_DATA[name]["private_key_path"]:
                 yield name, ca
 
     @property

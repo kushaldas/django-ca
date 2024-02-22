@@ -32,6 +32,8 @@ from cryptography.x509.oid import (
     SubjectInformationAccessOID,
 )
 
+from python_x509_pkcs11.privatekeys import PKCS11ECPrivateKey, PKCS11ED25519PrivateKey, PKCS11ED448PrivateKey, PKCS11RSAPrivateKey
+
 from django.utils.translation import gettext_lazy as _
 
 # IMPORTANT: Do **not** import any module from django_ca at runtime here, or you risk circular imports.
@@ -509,6 +511,10 @@ PRIVATE_KEY_TYPES = (
     ed25519.Ed25519PrivateKey,
     ed448.Ed448PrivateKey,
     rsa.RSAPrivateKey,
+    PKCS11RSAPrivateKey,
+    PKCS11ECPrivateKey,
+    PKCS11ED25519PrivateKey,
+    PKCS11ED448PrivateKey
 )
 PARSABLE_KEY_TYPES = ("RSA", "DSA", "EC", "Ed25519", "Ed448")
 

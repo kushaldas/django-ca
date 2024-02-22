@@ -115,7 +115,7 @@ CERT_DATA["multiple_ous"] = {
         ["OU", "VeriSign Trust Network"],
     ],
     "cn": "",
-    "key_filename": False,
+    "private_key_path": False,
     "csr_filename": False,
     "pub_filename": os.path.join("contrib", "multiple_ous_and_no_ext.pub"),
     "key_type": "RSA",
@@ -139,7 +139,7 @@ CERT_DATA["cloudflare_1"] = {
         ["CN", "sni24142.cloudflaressl.com"],
     ],
     "cn": "sni24142.cloudflaressl.com",
-    "key_filename": False,
+    "private_key_path": False,
     "csr_filename": False,
     "pub_filename": os.path.join("contrib", "cloudflare_1.pub"),
     "cat": "contrib",
@@ -364,8 +364,8 @@ for _name, _cert_data in CERT_DATA.items():
     else:
         basedir = FIXTURES_DIR
 
-    if _key_filename := _cert_data.get("key_filename"):
-        _cert_data["key_path"] = basedir / _cert_data["key_filename"]
+    if _private_key_pat := _cert_data.get("private_key_path"):
+        _cert_data["key_path"] = basedir / _cert_data["private_key_path"]
     if _password := _cert_data.get("password"):
         _cert_data["password"] = _cert_data["password"].encode("utf-8")
     _cert_data["pub_path"] = basedir / _cert_data["pub_filename"]

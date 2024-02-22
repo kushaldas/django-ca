@@ -323,7 +323,7 @@ class override_tmpcadir(override_settings):  # pylint: disable=invalid-name; in 
         self.options["STORAGES"]["django-ca"]["OPTIONS"]["location"] = tmpdir
 
         # copy CAs
-        for filename in [v["key_filename"] for v in CERT_DATA.values() if v["key_filename"] is not False]:
+        for filename in [v["private_key_path"] for v in CERT_DATA.values() if v.get("private_key_path", False) is not False]:
             shutil.copy(os.path.join(FIXTURES_DIR, filename), tmpdir)
 
         # Copy OCSP public key (required for OCSP tests)

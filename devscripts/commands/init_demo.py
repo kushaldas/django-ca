@@ -132,11 +132,15 @@ class Command(DevCommand):
         for _cert_name, cert_data in sorted(certs.items(), key=lambda t: (t[1]["type"], t[0])):
             cert: Union[CertificateAuthority, Certificate]  # facilitate type hinting later
             if cert_data["type"] == "ca":
-                if not cert_data["key_filename"]:
-                    continue  # CA without private key (e.g. real-world CA)
-
                 name = cert_data["name"]
-                cert = CertificateAuthority(name=name, private_key_path=f"{name}.key")
+                if not cert_data.get("private_key_path"):
+                    private_key_path =  "" # CA without private key (e.g. real-world CA)
+                else:
+                    # FIXME: The following I could not understand.
+                    private_key_path = f"{name}.key"
+                    #private_key_path = cert_data["private_key_path"]
+
+                cert = CertificateAuthority(name=name, secrets = {"private_key_path": private_key_path, "hsm_key_label": cert_data.get("hsm_key_label"), "hsm_key_type": cert_data.get("hsm_key_type") })
                 loaded_cas[cert.name] = cert
             else:
                 if cert_data["cat"] != "generated":
@@ -213,7 +217,7 @@ class Command(DevCommand):
             [
                 "python",
                 "dev.py",
-                "recreate-fixtures",
+                "recreate-fixtures-hsm",
                 "--no-delay",
                 "--no-ocsp",
                 "--no-contrib",

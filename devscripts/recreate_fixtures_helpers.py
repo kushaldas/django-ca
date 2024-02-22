@@ -128,20 +128,24 @@ def _update_cert_data(cert: Union[CertificateAuthority, Certificate], data: Dict
 
 
 def _write_ca(
-    dest: Path, ca: CertificateAuthority, cert_data: CertFixtureData, password: Optional[bytes] = None
+    dest: Path, ca: CertificateAuthority, cert_data: CertFixtureData, password: Optional[bytes] = None, hsm_key_label: Optional[str] = None
 ) -> None:
-    # Encode private key
-    if password is None:
+    # No password and not HSM key
+    if password is None and hsm_key_label is None:
         encryption: KeySerializationEncryption = NoEncryption()
-    else:
+    # With password and not HSM key
+    if password and hsm_key_label is None:
+        # This is where we have file based key.
         encryption = BestAvailableEncryption(password)
-    key_der = ca.key(password=password).private_bytes(
-        encoding=Encoding.DER, format=PrivateFormat.PKCS8, encryption_algorithm=encryption
-    )
-
-    # write files to dest
-    with open(dest / cert_data["key_filename"], "wb") as stream:
-        stream.write(key_der)
+    # For file key which is not on HSM
+    if hsm_key_label is None:
+        key_der = ca.key(password=password).private_bytes(
+            encoding=Encoding.DER, format=PrivateFormat.PKCS8, encryption_algorithm=encryption
+        )
+        # write files to dest
+        with open(dest / cert_data["private_key_path"], "wb") as stream:
+            stream.write(key_der)
+    # Public key will always be preset.
     with open(dest / cert_data["pub_filename"], "wb") as stream:
         stream.write(ca.pub.der)
 
@@ -160,7 +164,9 @@ def _write_ca(
 def _copy_cert(dest: Path, cert: Certificate, data: CertFixtureData, key_path: Path, csr_path: Path) -> None:
     csr_dest = dest / data["csr_filename"]
 
-    shutil.copy(key_path, dest / data["key_filename"])
+    # Only when we have a key
+    if data.get("private_key_path"):
+        shutil.copy(key_path, dest / data["private_key_path"])
     shutil.copy(csr_path, csr_dest)
     with open(dest / data["pub_filename"], "wb") as stream:
         stream.write(cert.pub.der)
@@ -184,7 +190,7 @@ def _update_contrib(
         "cat": "sphinx-contrib",
         "extensions": parsed.extensions,
         "pub_filename": filename,
-        "key_filename": False,
+        "private_key_path": False,
         "csr_filename": False,
         "serial": cert.serial,
         "subject": serialize_name(cert.subject),
@@ -274,6 +280,8 @@ def create_cas(dest: Path, now: datetime, delay: bool, data: CertFixtureData) ->
             ca = CertificateAuthority.objects.init(
                 name=data[name]["name"],
                 password=data[name].get("password"),
+                hsm_key_label=data[name].get("hsm_key_label"),
+                hsm_key_type=data[name].get("hsm_key_type"),
                 subject=x509.Name(parse_serialized_name_attributes((data[name]["subject"]))),
                 expires=datetime.now(tz=tz.utc) + data[name]["expires"],
                 key_type=data[name]["key_type"],
@@ -284,7 +292,7 @@ def create_cas(dest: Path, now: datetime, delay: bool, data: CertFixtureData) ->
             )
 
         ca_instances.append(ca)
-        _write_ca(dest, ca, data[name], password=data[name].get("password"))
+        _write_ca(dest, ca, data[name], password=data[name].get("password"), hsm_key_label=data[name].get("hsm_key_label"))
 
     # add parent/child relationships
     data["root"]["children"] = [[data["child"]["name"], data["child"]["serial"]]]

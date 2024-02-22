@@ -59,7 +59,7 @@ def _load_req(req: str) -> bytes:
 
 
 ocsp_profile = CERT_DATA["profile-ocsp"]
-ocsp_key_path = ocsp_profile["key_path"]
+#ocsp_key_path = ocsp_profile["key_path"]
 ocsp_pem_path = ocsp_profile["pub_path"]
 ocsp_pem = ocsp_profile["pub"]["pem"]
 req1 = _load_req(FIXTURES_DATA["ocsp"]["nonce"]["filename"])
@@ -68,12 +68,19 @@ req_no_nonce = _load_req(FIXTURES_DATA["ocsp"]["no-nonce"]["filename"])
 unknown_req = _load_req("unknown-serial")
 multiple_req = _load_req("multiple-serial")
 
+_secrets = {"private_key_path":ocsp_profile.get("private_key_path"),
+            "hsm_key_label":ocsp_profile.get("hsm_key_label"),
+            "hsm_key_type":ocsp_profile.get("hsm_key_type"),
+}
+
+
 urlpatterns = [
     path(
         "ocsp/",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            #responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert=ocsp_profile["pub_filename"],
             expires=1200,
         ),
@@ -83,7 +90,8 @@ urlpatterns = [
         "ocsp/serial/",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert=CERT_DATA["profile-ocsp"]["serial"],
             expires=1300,
         ),
@@ -93,7 +101,8 @@ urlpatterns = [
         "ocsp/full-pem/",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert=ocsp_pem,
             expires=1400,
         ),
@@ -103,7 +112,8 @@ urlpatterns = [
         "ocsp/loaded-cryptography/",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert=CERT_DATA["profile-ocsp"]["pub"]["parsed"],
             expires=1500,
         ),
@@ -113,7 +123,8 @@ urlpatterns = [
         r"^ocsp/cert/(?P<data>[a-zA-Z0-9=+/]+)$",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert=ocsp_profile["pub_filename"],
         ),
         name="get",
@@ -122,7 +133,8 @@ urlpatterns = [
         r"^ocsp/ca/(?P<data>[a-zA-Z0-9=+/]+)$",
         OCSPView.as_view(
             ca=CERT_DATA["root"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert=ocsp_profile["pub_filename"],
             ca_ocsp=True,
         ),
@@ -132,7 +144,8 @@ urlpatterns = [
         r"^ocsp-unknown/(?P<data>[a-zA-Z0-9=+/]+)$",
         OCSPView.as_view(
             ca="unknown",
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert=ocsp_profile["pub_filename"],
         ),
         name="unknown",
@@ -141,7 +154,8 @@ urlpatterns = [
         r"^ocsp/false-key/(?P<data>[a-zA-Z0-9=+/]+)$",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key="foobar",
+            # responder_key="foobar",
+            secrets={"private_key_path": "foobar", "hsm_key_label": ""},
             responder_cert=ocsp_profile["pub_filename"],
             expires=1200,
         ),
@@ -152,7 +166,8 @@ urlpatterns = [
         r"^ocsp/false-pem/(?P<data>[a-zA-Z0-9=+/]+)$",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert="/false/foobar/",
         ),
         name="false-pem",
@@ -161,7 +176,8 @@ urlpatterns = [
         r"^ocsp/false-pem-serial/(?P<data>[a-zA-Z0-9=+/]+)$",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert="AA:BB:CC",
         ),
         name="false-pem-serial",
@@ -170,7 +186,8 @@ urlpatterns = [
         r"^ocsp/false-pem-full/(?P<data>[a-zA-Z0-9=+/]+)$",
         OCSPView.as_view(
             ca=CERT_DATA["child"]["serial"],
-            responder_key=ocsp_profile["key_filename"],
+            # responder_key=ocsp_profile["private_key_path"],
+            secrets=_secrets,
             responder_cert="-----BEGIN CERTIFICATE-----\nvery-mean!",
         ),
         name="false-pem-full",

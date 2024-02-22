@@ -191,7 +191,7 @@ def generate_usable_ca_fixture(
     def fixture(request: "SubRequest", tmpcadir: SettingsWrapper) -> Iterator[CertificateAuthority]:
         ca = request.getfixturevalue(name)  # load the CA into the database
         data = CERT_DATA[name]
-        shutil.copy(os.path.join(FIXTURES_DIR, data["key_filename"]), tmpcadir.CA_DIR)
+        shutil.copy(os.path.join(FIXTURES_DIR, data["private_key_path"]), tmpcadir.CA_DIR)
 
         yield ca
 
@@ -263,7 +263,12 @@ def load_ca(
         ),
     )
 
-    ca = CertificateAuthority(name=name, private_key_path=f"{name}.key", parent=parent, **kwargs)
+    # We need 
+    secrets = {"private_key_path":CERT_DATA[name].get("private_key_path"),
+                "hsm_key_label":CERT_DATA[name].get("hsm_key_label"),
+                "hsm_key_type":CERT_DATA[name].get("hsm_key_type"),
+    }
+    ca = CertificateAuthority(name=name, secrets=secrets, parent=parent, **kwargs)
     ca.update_certificate(pub)  # calculates serial etc
     ca.full_clean()
     ca.save()
@@ -285,7 +290,7 @@ def load_cert(
 
 # Define various classes of certificates
 usable_ca_names = [
-    name for name, conf in CERT_DATA.items() if conf["type"] == "ca" and conf.get("key_filename")
+    name for name, conf in CERT_DATA.items() if conf["type"] == "ca" and conf.get("private_key_path")
 ]
 unusable_ca_names = [
     name for name, conf in CERT_DATA.items() if conf["type"] == "ca" and name not in usable_ca_names

@@ -44,7 +44,7 @@ PWD_PATHLEN = 2
 DSA_PATHLEN = 3
 
 
-def recreate_fixtures(  # pylint: disable=too-many-locals
+def recreate_fixtures_hsm(  # pylint: disable=too-many-locals
     dest: Path,
     delay: bool,
     only_contrib: bool,
@@ -93,6 +93,8 @@ def recreate_fixtures(  # pylint: disable=too-many-locals
         "root": {
             "type": "ca",
             "path_length": ROOT_PATHLEN,
+            "hsm_key_label": "root-key-label",
+            "hsm_key_type": "rsa_4096",
         },
         "child": {
             "type": "ca",
@@ -100,12 +102,16 @@ def recreate_fixtures(  # pylint: disable=too-many-locals
             "parent": "root",
             "path_length": CHILD_PATHLEN,
             "max_path_length": 0,
+            "hsm_key_label": "child-key-label",
+            "hsm_key_type": "rsa_4096",
         },
         "ec": {
             "type": "ca",
             "path_length": EC_PATHLEN,
             "key_type": "EC",
             "max_path_length": 1,
+            "hsm_key_label": "ec-key-label",
+            "hsm_key_type": "secp256r1",
         },
         "dsa": {
             "type": "ca",
@@ -125,6 +131,8 @@ def recreate_fixtures(  # pylint: disable=too-many-locals
             "path_length": 1,
             "max_path_length": 1,
             "algorithm": None,
+            "hsm_key_label": "ed25519-key-label",
+            "hsm_key_type": "ed25519",
         },
         "ed448": {
             "type": "ca",
@@ -132,6 +140,8 @@ def recreate_fixtures(  # pylint: disable=too-many-locals
             "path_length": 1,
             "max_path_length": 1,
             "algorithm": None,
+            "hsm_key_label": "ed448-key-label",
+            "hsm_key_type": "ed448",
         },
         "root-cert": {
             "ca": "root",
@@ -260,9 +270,13 @@ def recreate_fixtures(  # pylint: disable=too-many-locals
                 ),
             },
         },
-        "profile-enduser": {"ca": "child", "delta": timedelta(days=10), "csr": True},
-        "profile-ocsp": {"ca": "child", "delta": timedelta(days=10), "csr": True},
-        "no-extensions": {"ca": "child", "delta": timedelta(days=15), "csr": True},
+        "profile-enduser": {"ca": "child", "delta": timedelta(days=10), "csr": True,
+
+        },
+        "profile-ocsp": {"ca": "child", "delta": timedelta(days=10), "csr": True,
+        },
+        "no-extensions": {"ca": "child", "delta": timedelta(days=15), "csr": True,
+        },
         "empty-subject": {
             "ca": "child",
             "delta": timedelta(days=15),
@@ -519,7 +533,9 @@ def recreate_fixtures(  # pylint: disable=too-many-locals
             }
             for elem in subject
         ]
-        cert_values["private_key_path"] = f"{cert_name}.key"
+        # We set private_key_path only for file based ca(s) but not for HSM.
+        if not cert_values.get("hsm_key_label"):
+            cert_values["private_key_path"] = f"{cert_name}.key"
         cert_values["pub_filename"] = f"{cert_name}.pub"
         cert_values.setdefault("key_type", "RSA")
         if cert_values["key_type"] in ("RSA", "DSA"):
@@ -658,7 +674,7 @@ class Command(DevCommand):
 
         os.environ["DJANGO_SETTINGS_MODULE"] = "ca.test_settings"
         self.setup_django()
-        recreate_fixtures(
+        recreate_fixtures_hsm(
             dest=Path(args.dest),
             delay=args.delay,
             only_contrib=args.only_contrib,

@@ -24,6 +24,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat
 from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
+from python_x509_pkcs11.lib import KEYTYPES, get_keytypes_enum
+
 from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
@@ -42,8 +44,10 @@ from django_ca.typehints import (
     X509CertMixinTypeVar,
 )
 from django_ca.utils import (
+    create_hsm_key,
     generate_private_key,
     get_cert_builder,
+    get_hsm_private_key,
     get_storage,
     parse_expires,
     validate_hostname,
@@ -237,6 +241,8 @@ class CertificateAuthorityManager(
         path_length: Optional[int] = None,
         password: Optional[Union[str, bytes]] = None,
         parent_password: Optional[Union[str, bytes]] = None,
+        hsm_key_label: Optional[str] = None,
+        hsm_key_type: Optional[str] = None,
         elliptic_curve: Optional[ec.EllipticCurve] = None,
         key_type: ParsableKeyType = "RSA",
         key_size: Optional[int] = None,
@@ -299,6 +305,10 @@ class CertificateAuthorityManager(
             Password to encrypt the private key with.
         parent_password : bytes or str, optional
             Password that the private key of the parent CA is encrypted with.
+        hsm_key_label : str, optional
+            Key label for the HSM key.
+        hsm_key_type : str, optional
+            Key type as string for the HSM key.
         elliptic_curve : :py:class:`~cg:cryptography.hazmat.primitives.asymmetric.ec.EllipticCurve`, optional
             An elliptic curve to use for EC keys. This parameter is ignored if ``key_type`` is not ``"EC"``.
             Defaults to the :ref:`CA_DEFAULT_ELLIPTIC_CURVE <settings-ca-default-elliptic-curve>`.
@@ -367,6 +377,7 @@ class CertificateAuthorityManager(
         #       directly. generate_private_key() invokes this again, but we here to avoid sending a signal.
         key_size, elliptic_curve = validate_private_key_parameters(key_type, key_size, elliptic_curve)
         algorithm = validate_public_key_parameters(key_type, algorithm)
+        print(f"{name=} with {key_type=} and {algorithm=}")
 
         expires = parse_expires(expires)
 
@@ -489,7 +500,18 @@ class CertificateAuthorityManager(
             api_enabled=api_enabled,
         )
 
-        private_key = generate_private_key(key_size, key_type, elliptic_curve)
+        if hsm_key_label is None:
+            private_key = generate_private_key(key_size, key_type, elliptic_curve)
+        else:
+            if isinstance(hsm_key_type, str):
+                hsm_key_type_enum = get_keytypes_enum(hsm_key_type)
+            else:
+                hsm_key_type_enum = KEYTYPES.ED25519
+            # Now create the HSM key
+            create_hsm_key(hsm_key_label, hsm_key_type_enum) 
+            private_key = get_hsm_private_key(hsm_key_label, hsm_key_type_enum)
+
+
         public_key = private_key.public_key()
 
         builder = get_cert_builder(expires, serial=serial)
@@ -515,6 +537,7 @@ class CertificateAuthorityManager(
         for extra_extension in extensions:
             builder = builder.add_extension(extra_extension.value, critical=extra_extension.critical)
 
+        
         certificate = builder.sign(private_key=private_sign_key, algorithm=algorithm)
 
         ca: CertificateAuthority = self.model(
@@ -543,22 +566,33 @@ class CertificateAuthorityManager(
 
         ca.update_certificate(certificate)
 
-        if password is None:
-            encryption: serialization.KeySerializationEncryption = serialization.NoEncryption()
-        else:
-            if isinstance(password, str):
-                password = password.encode("utf-8")
-            encryption = serialization.BestAvailableEncryption(password)
+        # Now deal with secrets
+        private_key_path = ""
+        # First the file based key
+        if hsm_key_label is None:
+            if password is None:
+                encryption: serialization.KeySerializationEncryption = serialization.NoEncryption()
+            else:
+                if isinstance(password, str):
+                    password = password.encode("utf-8")
+                encryption = serialization.BestAvailableEncryption(password)
 
-        der = private_key.private_bytes(
-            encoding=Encoding.DER, format=PrivateFormat.PKCS8, encryption_algorithm=encryption
-        )
+            der = private_key.private_bytes(
+                encoding=Encoding.DER, format=PrivateFormat.PKCS8, encryption_algorithm=encryption
+            )
 
-        # write private key to file
-        safe_serial = ca.serial.replace(":", "")
-        path = path / pathlib.PurePath(f"{safe_serial}.key")
-        storage = get_storage()
-        ca.private_key_path = storage.save(str(path), ContentFile(der))
+            # write private key to file
+            safe_serial = ca.serial.replace(":", "")
+            path = path / pathlib.PurePath(f"{safe_serial}.key")
+            storage = get_storage()
+            private_key_path = storage.save(str(path), ContentFile(der))
+        
+        # We need string for JSON
+        if isinstance(hsm_key_type, KEYTYPES):
+            hsm_key_type = hsm_key_type.value
+        # This will be converted to JSON for database
+        secrets = {"private_key_path": private_key_path, "hsm_key_label": hsm_key_label, "hsm_key_type": hsm_key_type}
+        ca.secrets = secrets
         ca.save()
 
         post_create_ca.send(sender=self.model, ca=ca)

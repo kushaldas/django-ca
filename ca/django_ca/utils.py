@@ -34,6 +34,17 @@ from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.name import _ASN1Type
 from cryptography.x509.oid import NameOID
 
+from python_x509_pkcs11.pkcs11_handle import PKCS11Session
+from python_x509_pkcs11.lib import KEYTYPES, get_keytypes_enum
+
+from python_x509_pkcs11.privatekeys import (
+    PKCS11RSAPrivateKey, 
+    PKCS11ECPrivateKey, 
+    PKCS11ED25519PrivateKey, 
+    PKCS11ED448PrivateKey
+)
+import asyncio
+
 from django.core.files.storage import InvalidStorageError, Storage, get_storage_class, storages
 from django.utils import timezone
 
@@ -79,6 +90,26 @@ MULTIPLE_OIDS = (NameOID.DOMAIN_COMPONENT, NameOID.ORGANIZATIONAL_UNIT_NAME, Nam
 # uppercase values as keys for normalizing case
 NAME_CASE_MAPPINGS = {k.upper(): v for k, v in constants.NAME_OID_TYPES.items()}
 
+
+def create_hsm_key(key_label: str, key_type: Union[str, KEYTYPES]) -> None:
+    """Create a new HSM key for the given key type key label."""
+    asyncio.run(PKCS11Session().create_keypair(key_label, key_type=key_type))
+
+def get_hsm_private_key(hsm_key_label: str, hsm_key_type_enum: Union[str, KEYTYPES]) -> Union[rsa.RSAPrivateKey, ec.EllipticCurvePrivateKey, ed25519.Ed25519PrivateKey, ed448.Ed448PrivateKey]:
+    """Get the private key for the given HSM key label and key type enum."""
+    # If it is string, then convert to enum first
+    if isinstance(hsm_key_type_enum, str):
+        hsm_key_type_enum = get_keytypes_enum(hsm_key_type_enum)
+
+    if hsm_key_type_enum == KEYTYPES.ED25519:
+        private_key = PKCS11ED25519PrivateKey(hsm_key_label, hsm_key_type_enum)
+    elif hsm_key_type_enum == KEYTYPES.ED448:
+        private_key = PKCS11ED448PrivateKey(hsm_key_label, hsm_key_type_enum)
+    elif hsm_key_type_enum == KEYTYPES.RSA2048 or hsm_key_type_enum == KEYTYPES.RSA4096:
+        private_key = PKCS11RSAPrivateKey(hsm_key_label, hsm_key_type_enum)
+    elif hsm_key_type_enum in [KEYTYPES.SECP256r1, KEYTYPES.SECP384r1, KEYTYPES.SECP521r1]:
+        private_key = PKCS11ECPrivateKey(hsm_key_label, hsm_key_type_enum)
+    return private_key
 
 def encode_url(url: str) -> str:
     """IDNA encoding for domains in URLs.

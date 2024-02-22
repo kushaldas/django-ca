@@ -1,0 +1,12 @@
+DEBUG: true
+SECRET_KEY: dummy
+ALLOWED_HOSTS:
+  - localhost
+
+# django-ca configuration
+CA_DEFAULT_HOSTNAME: "localhost:8000"
+CA_ENABLE_ACME: true
+CA_ENABLE_REST_API: true
+
+# Set to true if you want to use Celery
+CA_USE_CELERY: false

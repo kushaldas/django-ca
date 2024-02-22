@@ -26,7 +26,7 @@ import os
 import typing
 from datetime import datetime, timedelta, timezone as tz
 from http import HTTPStatus
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Dict
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -50,7 +50,7 @@ from django.views.generic.detail import SingleObjectMixin
 
 from django_ca import ca_settings, constants
 from django_ca.models import Certificate, CertificateAuthority
-from django_ca.utils import SERIAL_RE, get_crl_cache_key, int_to_hex, parse_encoding, read_file
+from django_ca.utils import SERIAL_RE, get_crl_cache_key, int_to_hex, parse_encoding, read_file, get_hsm_private_key
 
 log = logging.getLogger(__name__)
 
@@ -137,9 +137,10 @@ class OCSPView(View):
     ca: str = ""
     """The name or serial of your Certificate Authority."""
 
-    responder_key: str = ""
-    """Private key used for signing OCSP responses. A relative path used by :ref:`CA_FILE_STORAGE
-    <settings-ca-file-storage>`."""
+    #responder_key: str = ""
+    #"""Private key used for signing OCSP responses. A relative path used by :ref:`CA_FILE_STORAGE
+    #<settings-ca-file-storage>`."""
+    secrets: Dict[str, Any] = {}
 
     responder_cert: Union[x509.Certificate, str] = ""
     """Public key of the responder.
@@ -187,15 +188,21 @@ class OCSPView(View):
 
     def get_responder_key(self) -> CertificateIssuerPrivateKeyTypes:
         """Get the private key used to sign OCSP responses."""
-        key = self.get_responder_key_data()
+        # If it is file based key
+        if self.secrets.get("hsm_key_label") is None:
+            # If hsm_key_label is None, then we must have a private_key_path
+            key = self.get_responder_key_data()
 
-        try:
-            loaded_key = serialization.load_der_private_key(key, None)
-        except ValueError:
             try:
-                loaded_key = serialization.load_pem_private_key(key, None)
-            except ValueError as ex:
-                raise ValueError("Could not decrypt private key.") from ex
+                loaded_key = serialization.load_der_private_key(key, None)
+            except ValueError:
+                try:
+                    loaded_key = serialization.load_pem_private_key(key, None)
+                except ValueError as ex:
+                    raise ValueError("Could not decrypt private key.") from ex
+        else: # If it is HSM based key
+            loaded_key = get_hsm_private_key(self.secrets.get("hsm_key_label"), self.secrets.get("hsm_key_type"))
+
 
         # Check that the private key is of a supported type
         if not isinstance(loaded_key, constants.PRIVATE_KEY_TYPES):
@@ -206,7 +213,7 @@ class OCSPView(View):
 
     def get_responder_key_data(self) -> bytes:
         """Read the file containing the private key used to sign OCSP responses."""
-        return read_file(self.responder_key)
+        return read_file(self.secrets.get("private_key_path"))
 
     def get_responder_cert(self) -> x509.Certificate:
         """Get the public key used to sign OCSP responses."""

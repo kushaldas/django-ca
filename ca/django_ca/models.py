@@ -44,6 +44,8 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509.oid import ExtensionOID, NameOID
 
+from python_x509_pkcs11.lib import get_keytypes_enum, KEYTYPES
+
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -99,6 +101,7 @@ from django_ca.utils import (
     generate_private_key,
     get_cert_builder,
     get_crl_cache_key,
+    get_hsm_private_key,
     get_storage,
     int_to_hex,
     parse_encoding,
@@ -497,7 +500,8 @@ class CertificateAuthority(X509CertMixin):
     parent = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children"
     )
-    private_key_path = models.CharField(max_length=256, help_text=_("Path to the private key."))
+    # private_key_path = models.CharField(max_length=256, help_text=_("Path to the private key."))
+    secrets = models.JSONField(default=dict)
 
     # various details used when signing certs
     crl_number = models.TextField(
@@ -612,17 +616,31 @@ class CertificateAuthority(X509CertMixin):
         if isinstance(password, str):
             password = password.encode("utf-8")
 
+        # We don't have the key loaded.
         if self._key is None:
-            key_data = read_file(self.private_key_path)
-
-            try:
-                self._key = load_der_private_key(key_data, password)
-            except ValueError:
+            # For file based private key.
+            if self.secrets.get("hsm_key_label") is not None:
+                hsm_key_label = self.secrets["hsm_key_label"]
+                hsm_key_type = self.secrets["hsm_key_type"]
+                if hsm_key_type is not None:
+                    hsm_key_type_enum = get_keytypes_enum(hsm_key_type)
+                else:
+                    hsm_key_type_enum = KEYTYPES.ED25519
+                self._key  = get_hsm_private_key(hsm_key_label, hsm_key_type_enum)
+            else:
+                # The is File based key
+                # TODO: have to understand save_fixture_data
+                
+                key_data = read_file(self.secrets["private_key_path"])
+                    
                 try:
-                    self._key = load_pem_private_key(key_data, password)
-                except ValueError as ex2:
-                    # cryptography passes the OpenSSL error directly here and it is notoriously unstable.
-                    raise ValueError("Could not decrypt private key - bad password?") from ex2
+                    self._key = load_der_private_key(key_data, password)
+                except ValueError:
+                    try:
+                        self._key = load_pem_private_key(key_data, password)
+                    except ValueError as ex2:
+                        # cryptography passes the OpenSSL error directly here and it is notoriously unstable.
+                        raise ValueError("Could not decrypt private key - bad password?") from ex2
 
         if not isinstance(self._key, constants.PRIVATE_KEY_TYPES):  # pragma: no cover
             raise ValueError("Private key of this type is not supported.")
@@ -634,7 +652,10 @@ class CertificateAuthority(X509CertMixin):
         """``True`` if the private key is accessible to the current process."""
         if self._key is not None:
             return True
-        return file_exists(self.private_key_path)
+        if self.secrets.get("private_key_path") is not None:
+            return file_exists(self.secrets.get("private_key_path"))
+        else:
+            return bool(self.key(None))
 
     @property
     def key_type(self) -> ParsableKeyType:

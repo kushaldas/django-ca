@@ -197,30 +197,40 @@ CA_DIR = "/non/existent"
 # WARNING: do not set to testserver, as URLValidator does not consider it a valid hostname
 CA_DEFAULT_HOSTNAME = "localhost:8000"
 
+_secrets = {"private_key_path": _fixture_data["certs"]["profile-ocsp"].get("private_key_path"),
+            "hsm_key_label": _fixture_data["certs"]["profile-ocsp"].get("hsm_key_label"),
+            "hsm_key_type": _fixture_data["certs"]["profile-ocsp"].get("hsm_key_type"),
+}
+
 CA_OCSP_URLS = {
     "root": {
         "ca": _fixture_data["certs"]["root"]["serial"],
-        "responder_key": _fixture_data["certs"]["profile-ocsp"]["key_filename"],
+        #"responder_key": _fixture_data["certs"]["profile-ocsp"]["private_key_path"],
+        "secrets": _secrets,
         "responder_cert": _fixture_data["certs"]["profile-ocsp"]["pub_filename"],
     },
     "child": {
         "ca": _fixture_data["certs"]["child"]["serial"],
-        "responder_key": _fixture_data["certs"]["profile-ocsp"]["key_filename"],
+        #"responder_key": _fixture_data["certs"]["profile-ocsp"]["private_key_path"],
+        "secrets": _secrets,
         "responder_cert": _fixture_data["certs"]["profile-ocsp"]["pub_filename"],
     },
     "ec": {
         "ca": _fixture_data["certs"]["ec"]["serial"],
-        "responder_key": _fixture_data["certs"]["profile-ocsp"]["key_filename"],
+        #"responder_key": _fixture_data["certs"]["profile-ocsp"]["private_key_path"],
+        "secrets": _secrets,
         "responder_cert": _fixture_data["certs"]["profile-ocsp"]["pub_filename"],
     },
     "dsa": {
         "ca": _fixture_data["certs"]["dsa"]["serial"],
-        "responder_key": _fixture_data["certs"]["profile-ocsp"]["key_filename"],
+        #"responder_key": _fixture_data["certs"]["profile-ocsp"]["private_key_path"],
+        "secrets": _secrets,
         "responder_cert": _fixture_data["certs"]["profile-ocsp"]["pub_filename"],
     },
     "pwd": {
         "ca": _fixture_data["certs"]["pwd"]["serial"],
-        "responder_key": _fixture_data["certs"]["profile-ocsp"]["key_filename"],
+        #"responder_key": _fixture_data["certs"]["profile-ocsp"]["private_key_path"],
+        "secrets": _secrets,
         "responder_cert": _fixture_data["certs"]["profile-ocsp"]["pub_filename"],
     },
 }
